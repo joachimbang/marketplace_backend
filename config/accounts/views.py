@@ -1,3 +1,124 @@
-from django.shortcuts import render
+from rest_framework import viewsets, status
+from rest_framework.decorators import action
+from rest_framework.permissions import IsAuthenticated, AllowAny
+from accounts.permissions import IsAdmin
+from .serializers import RegisterSerializer, UserSerializer, UpdateUserSerializer
 
-# Create your views here.
+from core_selectors.user_selectors import (
+    get_user_by_email,
+    get_all_users
+)
+
+from services.auth_services import login_user
+from utils.api_response import (
+    success_response,
+    error_response,
+    get_serializer_error
+)
+
+from accounts.models import User
+
+class UserViewSet(viewsets.ViewSet):
+
+    # POST /api/accounts/register/
+    @action(detail=False, methods=["post"], permission_classes=[AllowAny])
+    def register(self, request):
+
+        data = request.data
+
+        if get_user_by_email(data.get("email")):
+            return error_response("Email déjà utilisé.")
+
+        if User.objects.filter(username=data.get("username")).exists():
+            return error_response("Nom d'utilisateur déjà utilisé.")
+
+        if data.get("phone") and User.objects.filter(phone=data.get("phone")).exists():
+            return error_response("Téléphone déjà utilisé.")
+
+        serializer = RegisterSerializer(data=data)
+
+        if serializer.is_valid():
+
+            user = serializer.save()
+
+            return success_response(
+                "Utilisateur créé avec succès",
+                UserSerializer(user).data,
+                status.HTTP_201_CREATED
+            )
+
+        error_message = get_serializer_error(serializer)
+
+        return error_response(error_message)
+
+    # POST /api/accounts/login/
+    @action(detail=False, methods=["post"], permission_classes=[AllowAny])
+    def login(self, request):
+
+        email = request.data.get("email")
+        password = request.data.get("password")
+
+        result = login_user(email, password)
+
+        if result is None:
+            return error_response(
+                "Email ou mot de passe incorrect",
+                status.HTTP_401_UNAUTHORIZED
+            )
+
+        serializer = UserSerializer(result["user"])
+
+        return success_response(
+            "Connexion réussie",
+            {
+                "user": serializer.data,
+                "tokens": result["tokens"]
+            }
+        )
+
+    # GET /api/accounts/profile/
+    @action(detail=False, methods=["get"], permission_classes=[IsAuthenticated])
+    def profile(self, request):
+
+        serializer = UserSerializer(request.user)
+
+        return success_response(
+            "Profil récupéré",
+            serializer.data
+        )
+
+    # PUT /api/accounts/update_profile/
+    @action(detail=False, methods=["put"], permission_classes=[IsAuthenticated])
+    def update_profile(self, request):
+
+        serializer = UpdateUserSerializer(
+            request.user,
+            data=request.data,
+            partial=True
+        )
+
+        if serializer.is_valid():
+
+            serializer.save()
+
+            return success_response(
+                "Profil mis à jour",
+                serializer.data
+            )
+
+        error_message = get_serializer_error(serializer)
+
+        return error_response(error_message)
+
+    # GET /api/accounts/users/
+    @action(detail=False, methods=["get"], permission_classes=[IsAdmin])
+    def users(self, request):
+
+        users = get_all_users()
+
+        serializer = UserSerializer(users, many=True)
+
+        return success_response(
+            "Liste des utilisateurs",
+            serializer.data
+        )
