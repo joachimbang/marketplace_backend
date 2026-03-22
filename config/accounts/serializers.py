@@ -35,3 +35,8 @@ class UpdateUserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ("email","username", "phone", "avatar","password")
+
+class VerifyUserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ("id", "is_verified")
