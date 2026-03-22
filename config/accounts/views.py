@@ -1,8 +1,14 @@
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated, AllowAny
+
 from accounts.permissions import IsAdmin
-from .serializers import RegisterSerializer, UserSerializer, UpdateUserSerializer
+from .serializers import (
+    RegisterSerializer,
+    UserSerializer,
+    UpdateUserSerializer,
+    VerifyUserSerializer
+)
 
 from core_selectors.user_selectors import (
     get_user_by_email,
@@ -10,6 +16,7 @@ from core_selectors.user_selectors import (
 )
 
 from services.auth_services import login_user
+
 from utils.api_response import (
     success_response,
     error_response,
@@ -17,6 +24,7 @@ from utils.api_response import (
 )
 
 from accounts.models import User
+
 
 class UserViewSet(viewsets.ViewSet):
 
@@ -48,8 +56,8 @@ class UserViewSet(viewsets.ViewSet):
             )
 
         error_message = get_serializer_error(serializer)
-
         return error_response(error_message)
+
 
     # POST /api/accounts/login/
     @action(detail=False, methods=["post"], permission_classes=[AllowAny])
@@ -76,6 +84,7 @@ class UserViewSet(viewsets.ViewSet):
             }
         )
 
+
     # GET /api/accounts/profile/
     @action(detail=False, methods=["get"], permission_classes=[IsAuthenticated])
     def profile(self, request):
@@ -86,6 +95,7 @@ class UserViewSet(viewsets.ViewSet):
             "Profil récupéré",
             serializer.data
         )
+
 
     # PUT /api/accounts/update_profile/
     @action(detail=False, methods=["put"], permission_classes=[IsAuthenticated])
@@ -107,18 +117,53 @@ class UserViewSet(viewsets.ViewSet):
             )
 
         error_message = get_serializer_error(serializer)
-
         return error_response(error_message)
+
 
     # GET /api/accounts/users/
     @action(detail=False, methods=["get"], permission_classes=[IsAdmin])
     def users(self, request):
 
         users = get_all_users()
-
         serializer = UserSerializer(users, many=True)
 
         return success_response(
             "Liste des utilisateurs",
+            serializer.data
+        )
+
+
+    # PUT /api/accounts/verify_users/
+    @action(detail=False, methods=["put"], permission_classes=[IsAdmin])
+    def verify_users(self, request):
+
+        user_ids = request.data.get("user_ids")
+        user_id = request.data.get("user_id")
+
+        # gérer 1 utilisateur ou plusieurs
+        if user_ids:
+            ids = user_ids
+        elif user_id:
+            ids = [user_id]
+        else:
+            return error_response(
+                "Aucun utilisateur spécifié",
+                status.HTTP_400_BAD_REQUEST
+            )
+
+        users = User.objects.filter(id__in=ids)
+
+        if not users.exists():
+            return error_response(
+                "Aucun utilisateur trouvé",
+                status.HTTP_404_NOT_FOUND
+            )
+
+        users.update(is_verified=True)
+
+        serializer = VerifyUserSerializer(users, many=True)
+
+        return success_response(
+            "Utilisateurs vérifiés avec succès",
             serializer.data
         )
