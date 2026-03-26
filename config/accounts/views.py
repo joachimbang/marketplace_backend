@@ -1,8 +1,8 @@
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
-from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.permissions import AllowAny
 
-from accounts.permissions import IsAdmin
+from accounts.permissions import IsAdmin, IsAuthenticated
 from .serializers import (
     RegisterSerializer,
     UserSerializer,
@@ -25,9 +25,9 @@ from utils.api_response import (
 
 from accounts.models import User
 
-
+from rest_framework_simplejwt.authentication import JWTAuthentication
+from rest_framework.exceptions import AuthenticationFailed
 class UserViewSet(viewsets.ViewSet):
-
     # POST /api/accounts/register/
     @action(detail=False, methods=["post"], permission_classes=[AllowAny])
     def register(self, request):
@@ -45,20 +45,16 @@ class UserViewSet(viewsets.ViewSet):
 
         serializer = RegisterSerializer(data=data)
 
-        if serializer.is_valid():
+        if not serializer.is_valid():
+            return error_response(get_serializer_error(serializer))
 
-            user = serializer.save()
+        user = serializer.save()
 
-            return success_response(
-                "Utilisateur créé avec succès",
-                UserSerializer(user).data,
-                status.HTTP_201_CREATED
-            )
-
-        error_message = get_serializer_error(serializer)
-        return error_response(error_message)
-
-
+        return success_response(
+            "Utilisateur créé avec succès",
+            UserSerializer(user).data,
+            status.HTTP_201_CREATED
+        )
     # POST /api/accounts/login/
     @action(detail=False, methods=["post"], permission_classes=[AllowAny])
     def login(self, request):
@@ -96,7 +92,6 @@ class UserViewSet(viewsets.ViewSet):
             serializer.data
         )
 
-
     # PUT /api/accounts/update_profile/
     @action(detail=False, methods=["put"], permission_classes=[IsAuthenticated])
     def update_profile(self, request):
@@ -123,14 +118,76 @@ class UserViewSet(viewsets.ViewSet):
     # GET /api/accounts/users/
     @action(detail=False, methods=["get"], permission_classes=[IsAdmin])
     def users(self, request):
+        # --- LE FIX DE SECOURS (Si DRF est capricieux) ---
+        if request.user.is_anonymous:
+            from rest_framework_simplejwt.authentication import JWTAuthentication
+            user_auth_tuple = JWTAuthentication().authenticate(request)
+            if user_auth_tuple:
+                request.user = user_auth_tuple[0]
 
-        users = get_all_users()
+        print(f"User final: {request.user}") # Pour confirmer dans ton terminal Goma
+
+        # --- LA LOGIQUE DE LA VUE ---
+        users = User.objects.all()
         serializer = UserSerializer(users, many=True)
 
+        # TRÈS IMPORTANT : Il faut toujours un RETURN
         return success_response(
-            "Liste des utilisateurs",
+            "Liste des utilisateurs récupérée avec succès",
             serializer.data
         )
+    # @action(detail=False, methods=["get"], permission_classes=[AllowAny]) # On ouvre tout temporairement
+
+    # def users(self, request):
+    #     # Affiche TOUS les headers dans ton terminal Goma
+    #     print("--- HEADERS REÇUS ---")
+    #     print(f"Authorization: {request.headers.get('Authorization')}")
+    #     print(f"User: {request.user}")
+
+    #     token_id = "80581a80-bc6a-4ebc-8c80-6d3ec0f0da8f"
+    #     user_exists = User.objects.filter(id=token_id).exists()
+
+    #     print(f"--- DEBUG GOMA ---")
+    #     print(f"L'utilisateur existe-t-il en base ? : {user_exists}")
+    #     print(f"ID cherché : {token_id}")
+
+    #     users = User.objects.all()
+    #     serializer = UserSerializer(users, many=True)
+    #     return success_response("Liste des utilisateurs", serializer.data)
+
+    # def users(self, request):
+    #     auth = JWTAuthentication()
+    #     header = auth.get_header(request)
+
+    #     print("--- DIAGNOSTIC GOMA ---")
+    #     if header is None:
+    #         print("Erreur: Pas de header Authorization trouvé")
+    #     else:
+    #         raw_token = auth.get_raw_token(header)
+    #         try:
+    #             validated_token = auth.get_validated_token(raw_token)
+    #             user = auth.get_user(validated_token)
+    #             print(f"Utilisateur trouvé par SimpleJWT: {user}")
+    #         except Exception as e:
+    #             print(f"ÉCHEC AUTHENTIFICATION: {str(e)}")
+
+    #     users = User.objects.all()
+    #     serializer = UserSerializer(users, many=True)
+    #     return success_response("Liste des utilisateurs", serializer.data)
+
+    # Dans ton ViewSet
+    # def users(self, request):
+    #     # Si DRF a échoué mais que le token est valide
+    #     if request.user.is_anonymous:
+    #         from rest_framework_simplejwt.authentication import JWTAuthentication
+    #         user_auth_tuple = JWTAuthentication().authenticate(request)
+    #         if user_auth_tuple:
+    #             request.user = user_auth_tuple[0] # On force l'utilisateur
+
+    #     # Maintenant request.user est admin2@example.com
+    #     print(f"User final: {request.user}")
+    #
+
 
 
     # PUT /api/accounts/verify_users/
