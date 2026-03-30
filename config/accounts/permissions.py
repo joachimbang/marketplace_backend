@@ -1,67 +1,53 @@
 from rest_framework.permissions import BasePermission
-from rest_framework_simplejwt.authentication import JWTAuthentication
-
-def force_authenticate(request):
-    """
-    Moteur d'authentification centralisé.
-    Répare le request.user si DRF l'a laissé en AnonymousUser.
-    """
-    if request.user and request.user.is_authenticated:
-        return True
-
-    auth = JWTAuthentication()
-    header = auth.get_header(request)
-    if header:
-        raw_token = auth.get_raw_token(header)
-        try:
-            validated_token = auth.get_validated_token(raw_token)
-            user = auth.get_user(validated_token)
-            if user:
-                request.user = user
-                return True
-        except:
-            return False
-    return False
-
-# --- CLASSES DE PERMISSIONS FACTORISÉES ---
 
 class IsAuthenticated(BasePermission):
+    message = "Authentification requise."
     def has_permission(self, request, view):
-        return force_authenticate(request)
+        return bool(request.user and request.user.is_authenticated)
 
 class IsAdmin(BasePermission):
-    def has_permission(self, request, view):
-        if force_authenticate(request):
-            return getattr(request.user, 'role', None) == "admin"
-        return False
+    message = "Accès refusé : Vous n'avez pas le rôle administrateur."
 
-class IsSeller(BasePermission):
     def has_permission(self, request, view):
-        if force_authenticate(request):
-            return getattr(request.user, 'is_seller', False)
-        return False
+        print("--- TENTATIVE DE PERMISSION ADMIN ---") # Si ça n'affiche rien, authentication_classes manque dans la view
 
-class IsBuyer(BasePermission):
-    def has_permission(self, request, view):
-        if force_authenticate(request):
-            return getattr(request.user, 'is_buyer', False)
-        return False
-
-class IsOwner(BasePermission):
-    """
-    Vérifie si l'utilisateur est le propriétaire de l'objet ou un admin.
-    """
-    def has_permission(self, request, view):
-        return force_authenticate(request)
-
-    def has_object_permission(self, request, view, obj):
-        if not force_authenticate(request):
+        if not (request.user and request.user.is_authenticated):
+            print("ECHEC: Utilisateur non authentifié")
             return False
 
-        # Un admin a un droit de regard partout
+        user_role = str(getattr(request.user, 'role', "")).strip().lower()
+        print(f"DEBUG: User={request.user.email} | Role={user_role}")
+
+        return user_role == "admin"
+
+class IsSeller(BasePermission):
+    message = "Accès refusé : Réservé aux vendeurs."
+
+    def has_permission(self, request, view):
+        if not (request.user and request.user.is_authenticated):
+            return False
+        # Utilise soit le champ 'role', soit le booléen selon ton modèle User
+        return getattr(request.user, 'is_seller', False) or getattr(request.user, 'role', None) == "seller"
+
+class IsBuyer(BasePermission):
+    message = "Accès refusé : Réservé aux acheteurs."
+
+    def has_permission(self, request, view):
+        if not (request.user and request.user.is_authenticated):
+            return False
+        return getattr(request.user, 'is_buyer', False) or getattr(request.user, 'role', None) == "buyer"
+
+class IsOwner(BasePermission):
+    message = "Accès refusé : Vous n'êtes pas le propriétaire de cet objet."
+
+    def has_permission(self, request, view):
+        return bool(request.user and request.user.is_authenticated)
+
+    def has_object_permission(self, request, view, obj):
+        # Un admin peut tout voir
         if getattr(request.user, 'role', None) == "admin":
             return True
 
-        # Vérifie si l'objet appartient à l'utilisateur (champ 'user' ou 'owner')
-        owner = getattr(obj, 'user', getattr(obj, 'owner', None))
+        # On vérifie dynamiquement si l'objet appartient à l'user
+        owner = getattr(obj, 'user', getattr(obj, 'owner', getattr(obj, 'sender', None)))
         return owner == request.user
