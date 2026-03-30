@@ -13,11 +13,11 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 from pathlib import Path
 
 import os
-from django.conf import settings
+# from django.conf import settings
 from dotenv import load_dotenv
 from datetime import timedelta
 load_dotenv()
-from utils.exception_handler import custom_exception_handler
+# from utils.exception_handler import custom_exception_handler
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -41,14 +41,33 @@ MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 # Préfixe de l'URL dans le navigateur/mobile
 MEDIA_URL = '/media/'
 
+# config/settings.py
+
+# REST_FRAMEWORK = {
+#     'DEFAULT_AUTHENTICATION_CLASSES': (
+#         'rest_framework_simplejwt.authentication.JWTAuthentication',
+#     ),
+#     'DEFAULT_PERMISSION_CLASSES': (
+#         'rest_framework.permissions.AllowAny', # Laisse les @action décider
+#     ),
+#     # Vérifie bien que le dossier est 'utils.exceptions' et non 'utils.exception_handler'
+#     'EXCEPTION_HANDLER': 'utils.exception_handler.custom_exception_handler',
+# }
+
+# config/settings.py
+
+# ... (le reste de tes réglages)
+
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
+        'utils.exception_handler.SafeJWTAuthentication',
     ),
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated',
     ),
-    'EXCEPTION_HANDLER': 'utils.exceptions.custom_exception_handler',
+    # On donne juste le CHEMIN sous forme de texte.
+    # DRF l'importera au bon moment, quand les apps seront prêtes.
+    'EXCEPTION_HANDLER': 'utils.exception_handler.custom_exception_handler',
 }
 
 SIMPLE_JWT = {
@@ -86,6 +105,7 @@ INSTALLED_APPS = [
     "orders",
     "reviews",
     "corsheaders",
+    'rest_framework_simplejwt.token_blacklist',
 ]
 
 MIDDLEWARE = [

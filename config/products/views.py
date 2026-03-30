@@ -41,7 +41,7 @@ class ProductViewSet(viewsets.ViewSet):
     # ADMIN - CATEGORIES
     # =========================
 
-    @action(detail=False, methods=["post"], permission_classes=[IsAdmin])
+    @action(detail=False, methods=["post"],url_path="create_category", permission_classes=[IsAdmin])
     def create_category(self, request):
         """
         POST /api/products/create_category/
